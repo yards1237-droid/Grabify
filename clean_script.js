@@ -153,36 +153,92 @@ function grabVideo() {
   grabBtn.disabled = true;
   grabBtn.querySelector('.grab-label').textContent = 'Processing...';
 
-  setTimeout(function() {
-    var ytId  = extractYouTubeId(url);
-    var thumb = ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '';
-    var site  = extractSiteFromUrl(url);
+  // Step 1: Get video info from local server
+  fetch('/info', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: url })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(info) {
+    if (info.error) {
+      showError('Could not fetch video: ' + info.error);
+      grabBtn.disabled = false;
+      grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
+      return;
+    }
 
-    // Direct download URL using cobalt.tools public API
-    var dlUrl = 'https://cobalt.tools/api/json';
+    var quality = document.getElementById('qualitySelect').value;
+    var format  = document.getElementById('formatSelect').value;
+    var ytId    = extractYouTubeId(url);
+    var thumb   = info.thumbnail || (ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '');
+
+    // Build direct download URL pointing to local server
+    var dlUrl = 'http://localhost:5000/download?url=' + encodeURIComponent(url)
+              + '&quality=' + encodeURIComponent(quality)
+              + '&format='  + encodeURIComponent(format);
 
     statusEl.classList.add('hidden');
 
-    // Show result with direct cobalt link
-    var cobaltLink = 'https://cobalt.tools/#' + encodeURIComponent(url);
-
-    document.getElementById('resultTitle').textContent = site + ' video detected';
-    document.getElementById('resultSite').textContent  = 'Click Download — saves directly to your PC';
+    document.getElementById('resultTitle').textContent = info.title || 'Video Ready';
+    document.getElementById('resultSite').textContent  = (info.site || extractSiteFromUrl(url)) + ' — Click Download to save';
 
     var thumbEl = document.getElementById('resultThumb');
     if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; }
     else { thumbEl.style.display = 'none'; }
 
+    // Wire up download button to fetch the file as a blob and save it
     var dlLink = document.getElementById('downloadLink');
-    dlLink.href = cobaltLink;
-    dlLink.target = '_blank';
-    dlLink.textContent = 'Download';
+    dlLink.href = '#';
+    dlLink.removeAttribute('download');
+    dlLink.textContent = 'Download Video';
+    dlLink.onclick = function(e) {
+      e.preventDefault();
+      dlLink.textContent = 'Downloading...';
+      dlLink.style.opacity = '0.6';
+      fetch(dlUrl)
+        .then(function(r) {
+          if (!r.ok) throw new Error('Server error ' + r.status);
+          var filename = 'video.mp4';
+          var cd = r.headers.get('Content-Disposition');
+          if (cd) {
+            var m = cd.match(/filename="?([^"]+)"?/);
+            if (m) filename = m[1];
+          }
+          return r.blob().then(function(blob) {
+            return { blob: blob, filename: filename };
+          });
+        })
+        .then(function(data) {
+          var a = document.createElement('a');
+          var url = URL.createObjectURL(data.blob);
+          a.href = url;
+          a.download = data.filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          dlLink.textContent = 'Download Video';
+          dlLink.style.opacity = '1';
+        })
+        .catch(function(err) {
+          dlLink.textContent = 'Download Video';
+          dlLink.style.opacity = '1';
+          alert('Download failed: ' + err.message);
+        });
+      return false;
+    };
 
     resultEl.classList.remove('hidden');
     grabBtn.disabled = false;
     grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
     playSuccessSound();
-  }, 800);
+  })
+  .catch(function() {
+    showError('Cannot connect to Grabix server. Make sure the launcher is running!');
+    grabBtn.disabled = false;
+    grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
+  });
 }
 function showResult(title, site, thumb, dlUrl) {
   var statusEl = document.getElementById('grabStatus');
