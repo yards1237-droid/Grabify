@@ -19,20 +19,20 @@ def css():
 def js():
     return send_from_directory('.', 'clean_script.js')
 
-# Common yt-dlp options to bypass bot detection
 def get_ydl_opts(extra={}):
     opts = {
         'quiet': True,
         'no_warnings': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': ['ios', 'android'],
+                'player_skip': ['webpage', 'configs'],
             }
         },
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
+            'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
         },
+        'socket_timeout': 30,
     }
     opts.update(extra)
     return opts
@@ -74,11 +74,10 @@ def download():
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
         }
     else:
-        fs = 'bestvideo+bestaudio/best' if quality in ('max','auto') else f'bestvideo[height<={quality}]+bestaudio/best'
+        fs = 'best[ext=mp4]/best' if quality in ('max','auto') else f'best[height<={quality}][ext=mp4]/best[height<={quality}]'
         extra = {
             'format': fs,
             'outtmpl': out,
-            'merge_output_format': 'mp4',
         }
 
     try:
