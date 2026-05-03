@@ -1,11 +1,17 @@
 from flask import Flask, request, Response, send_from_directory, jsonify
 from flask_cors import CORS
-import yt_dlp, tempfile, os, logging
+import yt_dlp, tempfile, os, logging, subprocess, sys
 
 app = Flask(__name__)
 app.static_folder = None
 CORS(app)
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
+# Auto-update yt-dlp on startup
+try:
+    subprocess.run([sys.executable, '-m', 'yt_dlp', '-U'], 
+                   capture_output=True, timeout=30)
+except: pass
 
 @app.route('/')
 def index():
@@ -75,10 +81,7 @@ def download():
         }
     else:
         fs = 'best[ext=mp4]/best' if quality in ('max','auto') else f'best[height<={quality}][ext=mp4]/best[height<={quality}]'
-        extra = {
-            'format': fs,
-            'outtmpl': out,
-        }
+        extra = {'format': fs, 'outtmpl': out}
 
     try:
         opts = get_ydl_opts(extra)
