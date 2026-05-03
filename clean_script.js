@@ -154,6 +154,30 @@ function grabVideo() {
   grabBtn.querySelector('.grab-label').textContent = 'Processing...';
 
   // Step 1: Get video info from local server
+  // For YouTube, use cobalt.tools directly (YouTube blocks cloud servers)
+  var isYoutube = url.indexOf('youtube.com') !== -1 || url.indexOf('youtu.be') !== -1;
+  if (isYoutube) {
+    var ytId  = extractYouTubeId(url);
+    var thumb = ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '';
+    statusEl.classList.add('hidden');
+    document.getElementById('resultTitle').textContent = 'YouTube video ready';
+    document.getElementById('resultSite').textContent  = 'Click Download - opens cobalt.tools';
+    var thumbEl = document.getElementById('resultThumb');
+    if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; }
+    var dlLink = document.getElementById('downloadLink');
+    dlLink.href = '#';
+    dlLink.textContent = 'Download Video';
+    dlLink.onclick = function(e) {
+      e.preventDefault();
+      window.open('https://cobalt.tools/#' + encodeURIComponent(url), '_blank');
+    };
+    resultEl.classList.remove('hidden');
+    grabBtn.disabled = false;
+    grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
+    playSuccessSound();
+    return;
+  }
+
   fetch('/info', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -196,28 +220,23 @@ function grabVideo() {
       e.preventDefault();
       dlLink.textContent = 'Downloading...';
       dlLink.style.opacity = '0.6';
-      fetch(dlUrl)
-        .then(function(r) {
-          if (!r.ok) throw new Error('Server error ' + r.status);
-          var filename = 'video.mp4';
-          var cd = r.headers.get('Content-Disposition');
-          if (cd) {
-            var m = cd.match(/filename="?([^"]+)"?/);
-            if (m) filename = m[1];
-          }
-          return r.blob().then(function(blob) {
-            return { blob: blob, filename: filename };
-          });
-        })
+  fetch(dlUrl)
+        .then(function(r) { return r.json(); })
         .then(function(data) {
+          if (data.error) {
+            dlLink.textContent = 'Download Video';
+            dlLink.style.opacity = '1';
+            alert('Download failed: ' + data.error);
+            return;
+          }
+          // Open direct URL in new tab to trigger download
           var a = document.createElement('a');
-          var url = URL.createObjectURL(data.blob);
-          a.href = url;
-          a.download = data.filename;
+          a.href = data.direct_url;
+          a.download = data.filename || 'video.mp4';
+          a.target = '_blank';
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
-          URL.revokeObjectURL(url);
           dlLink.textContent = 'Download Video';
           dlLink.style.opacity = '1';
         })

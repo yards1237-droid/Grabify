@@ -512,6 +512,30 @@ function grabVideo() {
   grabBtn.querySelector('.grab-label').textContent = 'Processing...';
 
   // Step 1: Get video info from local server
+  // For YouTube, use cobalt.tools directly (YouTube blocks cloud servers)
+  var isYoutube = url.indexOf('youtube.com') !== -1 || url.indexOf('youtu.be') !== -1;
+  if (isYoutube) {
+    var ytId  = extractYouTubeId(url);
+    var thumb = ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '';
+    statusEl.classList.add('hidden');
+    document.getElementById('resultTitle').textContent = 'YouTube video ready';
+    document.getElementById('resultSite').textContent  = 'Click Download - opens cobalt.tools';
+    var thumbEl = document.getElementById('resultThumb');
+    if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; }
+    var dlLink = document.getElementById('downloadLink');
+    dlLink.href = '#';
+    dlLink.textContent = 'Download Video';
+    dlLink.onclick = function(e) {
+      e.preventDefault();
+      window.open('https://cobalt.tools/#' + encodeURIComponent(url), '_blank');
+    };
+    resultEl.classList.remove('hidden');
+    grabBtn.disabled = false;
+    grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
+    playSuccessSound();
+    return;
+  }
+
   fetch('/info', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
