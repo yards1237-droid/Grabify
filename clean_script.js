@@ -173,7 +173,9 @@ function grabVideo() {
     dlLink.onclick = function(e) {
       e.preventDefault();
       // Use cobalt.tools for all downloads - most reliable
-      window.open('https://cobalt.tools/#' + encodeURIComponent(url), '_blank');
+      // Try cobalt API first, fallback to cobalt.tools UI
+      var cobaltApi = 'https://cobalt.tools/#' + encodeURIComponent(url);
+      window.open(cobaltApi, '_blank');
     };
 
     resultEl.classList.remove('hidden');
@@ -200,7 +202,9 @@ function grabVideo() {
     dlLink.textContent = 'Download Video';
     dlLink.onclick = function(e) {
       e.preventDefault();
-      window.open('https://cobalt.tools/#' + encodeURIComponent(url), '_blank');
+      // Try cobalt API first, fallback to cobalt.tools UI
+      var cobaltApi = 'https://cobalt.tools/#' + encodeURIComponent(url);
+      window.open(cobaltApi, '_blank');
     };
 
     resultEl.classList.remove('hidden');
