@@ -154,7 +154,7 @@ function closeMenu() {
   document.getElementById('navLinks').classList.remove('open');
 }
 
-/* VIDEO DOWNLOADER - powered by Cobalt API */
+/* VIDEO DOWNLOADER - direct download through server */
 function clearUrl() {
   document.getElementById('videoUrl').value = '';
   document.getElementById('videoUrl').focus();
@@ -164,6 +164,8 @@ function clearUrl() {
 
 function grabVideo() {
   var url      = document.getElementById('videoUrl').value.trim();
+  var quality  = document.getElementById('qualitySelect').value;
+  var format   = document.getElementById('formatSelect').value;
   var statusEl = document.getElementById('grabStatus');
   var resultEl = document.getElementById('resultCard');
   var grabBtn  = document.getElementById('grabBtn');
@@ -177,9 +179,8 @@ function grabVideo() {
   if (url.indexOf('http') !== 0) { showError('Please enter a valid URL starting with https://'); return; }
 
   grabBtn.disabled = true;
-  grabBtn.querySelector('.grab-label').textContent = 'Processing...';
+  grabBtn.querySelector('.grab-label').textContent = 'Loading...';
 
-  // Get video info from our server
   fetch('/info', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -187,199 +188,86 @@ function grabVideo() {
   })
   .then(function(r) { return r.json(); })
   .then(function(info) {
-    if (info.error) {
-      // Still show the result card with cobalt fallback
-    }
-    var site  = info.site || extractSiteFromUrl(url);
-    var title = info.title || (site + ' video');
+    var title = info.title || extractSiteFromUrl(url) + ' video';
+    var site  = info.site  || extractSiteFromUrl(url);
     var ytId  = extractYouTubeId(url);
     var thumb = info.thumbnail || (ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '');
 
-    statusEl.classList.add('hidden');
-    document.getElementById('resultTitle').textContent = title;
-    document.getElementById('resultSite').textContent  = site + ' - Click Download to save';
+    statusEl.textContent = 'Getting download link...';
 
-    var thumbEl = document.getElementById('resultThumb');
-    if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; }
-    else { thumbEl.style.display = 'none'; }
-
-    var dlLink = document.getElementById('downloadLink');
-    dlLink.href = '#';
-    dlLink.textContent = 'Download Video';
-    dlLink.onclick = function(e) {
-      e.preventDefault();
-      var isYT = url.indexOf('youtube.com') !== -1 || url.indexOf('youtu.be') !== -1;
-      if (isYT) {
-        // Use our server with fresh cookies approach
-        statusEl.className = 'grab-status loading';
-        statusEl.classList.remove('hidden');
-        statusEl.textContent = 'Fetching YouTube video...';
-        
-        fetch('/ytdl', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url, quality: quality })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.error) {
-            showError('Could not fetch: ' + data.error);
-            grabBtn.disabled = false;
-            grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
-            return;
-          }
-          statusEl.classList.add('hidden');
-          document.getElementById('resultTitle').textContent = data.title || 'YouTube Video';
-          document.getElementById('resultSite').textContent = 'YouTube - Click Download to save';
-          var ytId = extractYouTubeId(url);
-          var thumb = ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '';
-          var thumbEl = document.getElementById('resultThumb');
-          if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; }
-          var dlLink = document.getElementById('downloadLink');
-          dlLink.href = '#';
-          dlLink.textContent = 'Download Video';
-          dlLink.onclick = function(e) {
-            e.preventDefault();
-            dlLink.textContent = 'Downloading...';
-            dlLink.style.opacity = '0.6';
-            fetch(data.download_url)
-              .then(function(r) {
-                if (!r.ok) throw new Error('Failed');
-                return r.blob();
-              })
-              .then(function(blob) {
-                var a = document.createElement('a');
-                var burl = URL.createObjectURL(blob);
-                a.href = burl;
-                a.download = (data.title || 'video') + '.mp4';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(burl);
-                dlLink.textContent = 'Download Video';
-                dlLink.style.opacity = '1';
-              })
-              .catch(function() {
-                dlLink.textContent = 'Download Video';
-                dlLink.style.opacity = '1';
-                showError('Download failed. Please try again.');
-              });
-          };
-          resultEl.classList.remove('hidden');
-          grabBtn.disabled = false;
-          grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
-          playSuccessSound();
-        })
-        .catch(function() {
-          showError('Could not connect to server. Please try again.');
-          grabBtn.disabled = false;
-          grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
-        });
-      } else {
-        window.open('https://cobalt.tools/#' + encodeURIComponent(url), '_blank');
+    fetch('/grab', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url, quality: quality, format: format })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        showError(data.error);
+        grabBtn.disabled = false;
+        grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
+        return;
       }
-    };
 
-    resultEl.classList.remove('hidden');
-    grabBtn.disabled = false;
-    grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
-    playSuccessSound();
+      statusEl.classList.add('hidden');
+      document.getElementById('resultTitle').textContent = data.title || title;
+      document.getElementById('resultSite').textContent  = site + ' - Click Download to save';
+
+      var thumbEl = document.getElementById('resultThumb');
+      if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; }
+      else { thumbEl.style.display = 'none'; }
+
+      var dlLink = document.getElementById('downloadLink');
+      dlLink.href = '#';
+      dlLink.textContent = format === 'mp3' ? 'Download MP3' : 'Download Video';
+      dlLink.onclick = function(e) {
+        e.preventDefault();
+        dlLink.textContent = 'Downloading...';
+        dlLink.style.opacity = '0.6';
+
+        var proxyUrl = '/proxy?url=' + encodeURIComponent(data.direct_url)
+                     + '&filename=' + encodeURIComponent(data.filename)
+                     + '&format=' + encodeURIComponent(format);
+
+        fetch(proxyUrl)
+          .then(function(r) {
+            if (!r.ok) throw new Error('Server error ' + r.status);
+            return r.blob();
+          })
+          .then(function(blob) {
+            var a = document.createElement('a');
+            var burl = URL.createObjectURL(blob);
+            a.href = burl;
+            a.download = data.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(burl);
+            dlLink.textContent = format === 'mp3' ? 'Download MP3' : 'Download Video';
+            dlLink.style.opacity = '1';
+          })
+          .catch(function(err) {
+            dlLink.textContent = format === 'mp3' ? 'Download MP3' : 'Download Video';
+            dlLink.style.opacity = '1';
+            showError('Download failed: ' + err.message);
+          });
+      };
+
+      resultEl.classList.remove('hidden');
+      grabBtn.disabled = false;
+      grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
+      playSuccessSound();
+    })
+    .catch(function() {
+      showError('Could not get download link. Please try again.');
+      grabBtn.disabled = false;
+      grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
+    });
   })
   .catch(function() {
-    // Even on error, show cobalt fallback
-    var site  = extractSiteFromUrl(url);
-    var ytId  = extractYouTubeId(url);
-    var thumb = ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '';
-
-    statusEl.classList.add('hidden');
-    document.getElementById('resultTitle').textContent = site + ' video ready';
-    document.getElementById('resultSite').textContent  = 'Click Download to save';
-
-    var thumbEl = document.getElementById('resultThumb');
-    if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; }
-    else { thumbEl.style.display = 'none'; }
-
-    var dlLink = document.getElementById('downloadLink');
-    dlLink.href = '#';
-    dlLink.textContent = 'Download Video';
-    dlLink.onclick = function(e) {
-      e.preventDefault();
-      var isYT = url.indexOf('youtube.com') !== -1 || url.indexOf('youtu.be') !== -1;
-      if (isYT) {
-        // Use our server with fresh cookies approach
-        statusEl.className = 'grab-status loading';
-        statusEl.classList.remove('hidden');
-        statusEl.textContent = 'Fetching YouTube video...';
-        
-        fetch('/ytdl', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url, quality: quality })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.error) {
-            showError('Could not fetch: ' + data.error);
-            grabBtn.disabled = false;
-            grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
-            return;
-          }
-          statusEl.classList.add('hidden');
-          document.getElementById('resultTitle').textContent = data.title || 'YouTube Video';
-          document.getElementById('resultSite').textContent = 'YouTube - Click Download to save';
-          var ytId = extractYouTubeId(url);
-          var thumb = ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '';
-          var thumbEl = document.getElementById('resultThumb');
-          if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; }
-          var dlLink = document.getElementById('downloadLink');
-          dlLink.href = '#';
-          dlLink.textContent = 'Download Video';
-          dlLink.onclick = function(e) {
-            e.preventDefault();
-            dlLink.textContent = 'Downloading...';
-            dlLink.style.opacity = '0.6';
-            fetch(data.download_url)
-              .then(function(r) {
-                if (!r.ok) throw new Error('Failed');
-                return r.blob();
-              })
-              .then(function(blob) {
-                var a = document.createElement('a');
-                var burl = URL.createObjectURL(blob);
-                a.href = burl;
-                a.download = (data.title || 'video') + '.mp4';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(burl);
-                dlLink.textContent = 'Download Video';
-                dlLink.style.opacity = '1';
-              })
-              .catch(function() {
-                dlLink.textContent = 'Download Video';
-                dlLink.style.opacity = '1';
-                showError('Download failed. Please try again.');
-              });
-          };
-          resultEl.classList.remove('hidden');
-          grabBtn.disabled = false;
-          grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
-          playSuccessSound();
-        })
-        .catch(function() {
-          showError('Could not connect to server. Please try again.');
-          grabBtn.disabled = false;
-          grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
-        });
-      } else {
-        window.open('https://cobalt.tools/#' + encodeURIComponent(url), '_blank');
-      }
-    };
-
-    resultEl.classList.remove('hidden');
+    showError('Could not connect to server. Please try again.');
     grabBtn.disabled = false;
     grabBtn.querySelector('.grab-label').textContent = 'Grab Video';
-    playSuccessSound();
   });
 }
 function showResult(title, site, thumb, dlUrl) {
